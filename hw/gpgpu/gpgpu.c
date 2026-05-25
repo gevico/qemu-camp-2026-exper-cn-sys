@@ -52,6 +52,42 @@ static uint64_t gpgpu_ctrl_read(void *opaque, hwaddr addr, unsigned size)
         return s->kernel.block_dim[1];
     case GPGPU_REG_BLOCK_DIM_Z:
         return s->kernel.block_dim[2];
+    case GPGPU_REG_DMA_SRC_LO:
+        return (uint32_t)(s->dma.src_addr & 0xFFFFFFFF);
+    case GPGPU_REG_DMA_SRC_HI:
+        return (uint32_t)(s->dma.src_addr >> 32);
+    case GPGPU_REG_DMA_DST_LO:
+        return (uint32_t)(s->dma.dst_addr & 0xFFFFFFFF);
+    case GPGPU_REG_DMA_DST_HI:
+        return (uint32_t)(s->dma.dst_addr >> 32);
+    case GPGPU_REG_DMA_SIZE:
+        return s->dma.size;
+    case GPGPU_REG_DMA_CTRL:
+        return s->dma.ctrl;
+    case GPGPU_REG_DMA_STATUS:
+        return s->dma.status;
+    case GPGPU_REG_IRQ_ENABLE:
+        return s->irq_enable;
+    case GPGPU_REG_IRQ_STATUS:
+        return s->irq_status;
+    case GPGPU_REG_THREAD_ID_X:
+        return s->simt.thread_id[0];
+    case GPGPU_REG_THREAD_ID_Y:
+        return s->simt.thread_id[1];
+    case GPGPU_REG_THREAD_ID_Z:
+        return s->simt.thread_id[2];
+    case GPGPU_REG_BLOCK_ID_X:
+        return s->simt.block_id[0];
+    case GPGPU_REG_BLOCK_ID_Y:
+        return s->simt.block_id[1];
+    case GPGPU_REG_BLOCK_ID_Z:
+        return s->simt.block_id[2];
+    case GPGPU_REG_WARP_ID:
+        return s->simt.warp_id;
+    case GPGPU_REG_LANE_ID:
+        return s->simt.lane_id;
+    case GPGPU_REG_THREAD_MASK:
+        return s->simt.thread_mask;
     default:
         return 0;
     }
@@ -66,6 +102,9 @@ static void gpgpu_ctrl_write(void *opaque, hwaddr addr, uint64_t val,
      switch(addr){
         case GPGPU_REG_GLOBAL_CTRL:
             s->global_ctrl = val;
+            if(val & GPGPU_CTRL_RESET){
+                memset(&s->simt, 0, sizeof(s->simt));
+            }
             break;
         case GPGPU_REG_GRID_DIM_X:
             s->kernel.grid_dim[0] = val;
@@ -84,6 +123,60 @@ static void gpgpu_ctrl_write(void *opaque, hwaddr addr, uint64_t val,
             break;
         case GPGPU_REG_BLOCK_DIM_Z:
             s->kernel.block_dim[2] = val;
+            break;
+        case GPGPU_REG_DMA_SRC_LO:
+            s->dma.src_addr = (s->dma.src_addr & 0xFFFFFFFF00000000ULL) | val;
+            break;
+        case GPGPU_REG_DMA_SRC_HI:
+            s->dma.src_addr = (s->dma.src_addr & 0xFFFFFFFFULL) | ((uint64_t)val << 32);
+            break;
+        case GPGPU_REG_DMA_DST_LO:
+            s->dma.dst_addr = (s->dma.dst_addr & 0xFFFFFFFF00000000ULL) | val;
+            break;
+        case GPGPU_REG_DMA_DST_HI:
+            s->dma.dst_addr = (s->dma.dst_addr & 0xFFFFFFFFULL) | ((uint64_t)val << 32);
+            break;
+        case GPGPU_REG_DMA_SIZE:
+            s->dma.size = val;
+            break;
+        case GPGPU_REG_DMA_CTRL:
+            s->dma.ctrl = val;
+            break;
+        case GPGPU_REG_DMA_STATUS:
+            s->dma.status = val;
+            break;
+        case GPGPU_REG_IRQ_ENABLE:
+            s->irq_enable = val;
+            break;
+        case GPGPU_REG_IRQ_STATUS:
+            s->irq_status = val;
+            break;
+        case GPGPU_REG_THREAD_ID_X:
+            s->simt.thread_id[0] = val;
+            break;
+        case GPGPU_REG_THREAD_ID_Y:
+            s->simt.thread_id[1] = val;
+            break;
+        case GPGPU_REG_THREAD_ID_Z:
+            s->simt.thread_id[2] = val;
+            break;
+        case GPGPU_REG_BLOCK_ID_X:
+            s->simt.block_id[0] = val;
+            break;
+        case GPGPU_REG_BLOCK_ID_Y:
+            s->simt.block_id[1] = val;
+            break;
+        case GPGPU_REG_BLOCK_ID_Z:
+            s->simt.block_id[2] = val;
+            break;
+        case GPGPU_REG_WARP_ID:
+            s->simt.warp_id = val;
+            break;
+        case GPGPU_REG_LANE_ID:
+            s->simt.lane_id = val;
+            break;
+        case GPGPU_REG_THREAD_MASK:
+            s->simt.thread_mask = val;
             break;
     }
 }
