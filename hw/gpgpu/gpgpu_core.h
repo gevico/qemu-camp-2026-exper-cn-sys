@@ -129,6 +129,7 @@ void gpgpu_core_init_warp(GPGPUWarp *warp, uint32_t pc,
                           uint32_t num_threads,
                           uint32_t warp_id, uint32_t block_id_linear);
 
+
 /**
  * gpgpu_core_exec_warp - 执行一个 warp 直到完成
  * @s: GPGPU 设备状态

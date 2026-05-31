@@ -70,6 +70,10 @@ static uint64_t gpgpu_ctrl_read(void *opaque, hwaddr addr, unsigned size)
         return s->irq_enable;
     case GPGPU_REG_IRQ_STATUS:
         return s->irq_status;
+    case GPGPU_REG_KERNEL_ADDR_LO:
+        return (uint32_t)(s->kernel.kernel_addr & 0xFFFFFFFF);
+    case GPGPU_REG_KERNEL_ADDR_HI:
+        return (uint32_t)(s->kernel.kernel_addr >> 32);
     case GPGPU_REG_THREAD_ID_X:
         return s->simt.thread_id[0];
     case GPGPU_REG_THREAD_ID_Y:
@@ -105,6 +109,12 @@ static void gpgpu_ctrl_write(void *opaque, hwaddr addr, uint64_t val,
             if(val & GPGPU_CTRL_RESET){
                 memset(&s->simt, 0, sizeof(s->simt));
             }
+            break;
+        case GPGPU_REG_KERNEL_ADDR_LO:
+            s->kernel.kernel_addr = (s->kernel.kernel_addr & 0xFFFFFFFF00000000ULL) | val;
+            break;
+        case GPGPU_REG_KERNEL_ADDR_HI:
+            s->kernel.kernel_addr = (s->kernel.kernel_addr & 0xFFFFFFFFULL) | ((uint64_t)val << 32);
             break;
         case GPGPU_REG_GRID_DIM_X:
             s->kernel.grid_dim[0] = val;
@@ -177,6 +187,17 @@ static void gpgpu_ctrl_write(void *opaque, hwaddr addr, uint64_t val,
             break;
         case GPGPU_REG_THREAD_MASK:
             s->simt.thread_mask = val;
+            break;
+        case GPGPU_REG_DISPATCH:
+            if(s->global_status & GPGPU_STATUS_READY){
+                s->global_status = GPGPU_STATUS_BUSY;
+                gpgpu_core_exec_kernel(s);
+                s->global_status = GPGPU_STATUS_READY;
+                s->irq_status |=GPGPU_IRQ_KERNEL_DONE;
+                if(s->irq_enable & GPGPU_IRQ_KERNEL_DONE){
+                    msix_notify(&s->parent_obj,GPGPU_MSIX_VEC_KERNEL);
+                }
+            }
             break;
     }
 }
