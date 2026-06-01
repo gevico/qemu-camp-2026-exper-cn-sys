@@ -115,7 +115,30 @@ int gpgpu_core_exec_warp(GPGPUState *s, GPGPUWarp *warp, uint32_t max_cycles)
                     case 0x68: /* fcvt.s.w (int→float) */
                         lane->fpr[rd] = int32_to_float32(lane->gpr[rs1], &lane->fp_status);
                         break;
-                        
+                    case 0x22: /* BF16 conversions */
+                        if (rs2 == 1) {
+                            lane->fpr[rd] = lane->fpr[rs1] & 0xFFFF0000;
+                        } else {
+                            lane->fpr[rd] = lane->fpr[rs1];
+                        }
+                        break;    
+                    case 0x24: /* E4M3 conversions */
+                    if (rs2 == 1) {
+                        uint32_t f = lane->fpr[rs1];
+                        int e4m3_exp = ((f >> 23) & 0xFF) - 127 + 7;
+                        if (e4m3_exp < 0) e4m3_exp = 0;
+                        if (e4m3_exp > 14) e4m3_exp = 14;
+                        lane->fpr[rd] = ((f >> 31) & 1) << 7 |
+                                            (e4m3_exp << 3) |
+                                                ((f >> 20) & 0x7);
+                        } else {
+                        uint8_t e = lane->fpr[rs1] & 0xFF;
+                        int exp = ((e >> 3) & 0xF) - 7 + 127;
+                        lane->fpr[rd] = ((e >> 7) & 1) << 31 |
+                                        (exp << 23) |
+                                        ((e & 0x7) << 20);
+                        }
+                        break;
                     default:
                         return -1;
 
