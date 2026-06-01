@@ -115,6 +115,9 @@ int gpgpu_core_exec_warp(GPGPUState *s, GPGPUWarp *warp, uint32_t max_cycles)
                     case 0x68: /* fcvt.s.w (int→float) */
                         lane->fpr[rd] = int32_to_float32(lane->gpr[rs1], &lane->fp_status);
                         break;
+                    case 0x78: /* fmv.w.x (int→fpr bit copy) */
+                        lane->fpr[rd] = lane->gpr[rs1];
+                        break;
                     case 0x22: /* BF16 conversions */
                         if (rs2 == 1) {
                             lane->fpr[rd] = lane->fpr[rs1] & 0xFFFF0000;
@@ -122,23 +125,75 @@ int gpgpu_core_exec_warp(GPGPUState *s, GPGPUWarp *warp, uint32_t max_cycles)
                             lane->fpr[rd] = lane->fpr[rs1];
                         }
                         break;    
-                    case 0x24: /* E4M3 conversions */
-                    if (rs2 == 1) {
-                        uint32_t f = lane->fpr[rs1];
-                        int e4m3_exp = ((f >> 23) & 0xFF) - 127 + 7;
-                        if (e4m3_exp < 0) e4m3_exp = 0;
-                        if (e4m3_exp > 14) e4m3_exp = 14;
-                        lane->fpr[rd] = ((f >> 31) & 1) << 7 |
-                                            (e4m3_exp << 3) |
-                                                ((f >> 20) & 0x7);
-                        } else {
+                    case 0x24: /* E4M3 and E5M2 conversions */
+                    if (rs2 == 0) {
                         uint8_t e = lane->fpr[rs1] & 0xFF;
                         int exp = ((e >> 3) & 0xF) - 7 + 127;
                         lane->fpr[rd] = ((e >> 7) & 1) << 31 |
                                         (exp << 23) |
                                         ((e & 0x7) << 20);
+                    } else if (rs2 == 1) {
+                        uint32_t f = lane->fpr[rs1];
+                        int sign = (f >> 31) & 1;
+                        uint32_t exp32 = (f >> 23) & 0xFF;
+                        uint32_t m23 = f & 0x7FFFFF;
+                        if (exp32 == 0 && m23 == 0) {
+                            lane->fpr[rd] = sign << 7;
+                        } else if (exp32 == 0xFF) {
+                            lane->fpr[rd] = (sign << 7) | (15 << 3) | 6;
+                        } else {
+                            int e4 = (int)exp32 - 127 + 7;
+                            if (e4 < 0) {
+                                lane->fpr[rd] = sign << 7;
+                            } else if (e4 > 15) {
+                                lane->fpr[rd] = (sign << 7) | (15 << 3) | 6;
+                            } else {
+                                uint32_t m3 = m23 >> 20;
+                                if (e4 == 15 && m3 > 6) {
+                                    lane->fpr[rd] = (sign << 7) | (15 << 3) | 6;
+                                } else {
+                                    lane->fpr[rd] = (sign << 7) | (e4 << 3) | m3;
+                                }
+                            }
                         }
-                        break;
+                    } else if (rs2 == 2) {
+                        uint8_t e = lane->fpr[rs1] & 0xFF;
+                        int exp = ((e >> 2) & 0x1F) - 15 + 127;
+                        lane->fpr[rd] = ((e >> 7) & 1) << 31 |
+                                        (exp << 23) |
+                                        ((e & 0x3) << 21);
+                    } else {
+                        uint32_t f = lane->fpr[rs1];
+                        int e5m2_exp = ((f >> 23) & 0xFF) - 127 + 15;
+                        if (e5m2_exp < 0) e5m2_exp = 0;
+                        if (e5m2_exp > 30) e5m2_exp = 30;
+                        lane->fpr[rd] = ((f >> 31) & 1) << 7 |
+                                        (e5m2_exp << 2) |
+                                        ((f >> 21) & 0x3);
+                    }
+                    break;
+                    case 0x26: /* E2M1 conversions */
+                    if (rs2 == 0) {
+                        uint8_t e = lane->fpr[rs1] & 0xFF;
+                        int exp = ((e >> 1) & 0x3) - 1 + 127;
+                        lane->fpr[rd] = ((e >> 7) & 1) << 31 |
+                                        (exp << 23) |
+                                        ((e & 0x1) << 22);
+                    } else {
+                        uint32_t f = lane->fpr[rs1];
+                        int e2m1_exp = ((f >> 23) & 0xFF) - 127 + 1;
+                        if (e2m1_exp < 0) {
+                            lane->fpr[rd] = 0;
+                        } else if (e2m1_exp >= 3) {
+                            lane->fpr[rd] = ((f >> 31) & 1) << 7 |
+                                            (3 << 1) | 1;
+                        } else {
+                            uint32_t m1 = (f >> 22) & 1;
+                            lane->fpr[rd] = ((f >> 31) & 1) << 7 |
+                                            (e2m1_exp << 1) | m1;
+                        }
+                    }
+                    break;
                     default:
                         return -1;
 
