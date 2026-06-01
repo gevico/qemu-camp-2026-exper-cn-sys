@@ -51,6 +51,7 @@ int gpgpu_core_exec_warp(GPGPUState *s, GPGPUWarp *warp, uint32_t max_cycles)
             uint32_t opcode = inst & 0x7F;
             uint32_t rd     = (inst >> 7) & 0x1F;
             uint32_t funct3 = (inst >> 12) & 0x7;
+            uint32_t funct7 = (inst >> 25);
             uint32_t rs1    = (inst >> 15) & 0x1F;
             uint32_t rs2    = (inst >> 20) & 0x1F;
 
@@ -93,6 +94,33 @@ int gpgpu_core_exec_warp(GPGPUState *s, GPGPUWarp *warp, uint32_t max_cycles)
                 } else {
                     return -1;
                 }
+                break;
+            }
+            case 0x53:{
+                lane->fp_status.float_rounding_mode = float_round_nearest_even;
+
+                switch (funct7){
+                    case 0x00:
+                        lane->fpr[rd] = float32_add(lane->fpr[rs1], lane->fpr[rs2],
+                                                    &lane->fp_status);
+                        break;
+                    case 0x08: /* fmul.s */
+                        lane->fpr[rd] = float32_mul(lane->fpr[rs1], lane->fpr[rs2],
+                                                 &lane->fp_status);
+                        break;
+                    case 0x60: /* fcvt.w.s (float→int) */
+                        lane->gpr[rd] = float32_to_int32(lane->fpr[rs1],
+                                                      &lane->fp_status);
+                        break;
+                    case 0x68: /* fcvt.s.w (int→float) */
+                        lane->fpr[rd] = int32_to_float32(lane->gpr[rs1], &lane->fp_status);
+                        break;
+                        
+                    default:
+                        return -1;
+
+                }
+                lane->pc+=4;
                 break;
             }
             case 0x23: {
